@@ -50,7 +50,7 @@ Windows 11 切换深色/浅色主题需要打开 `设置 > 个性化 > 颜色` �
 | NFR-2 | 无需管理员权限（全部操作在 HKCU 下） |
 | NFR-3 | `dotnet build` 零警告（`TreatWarningsAsErrors=true`），CI 四门禁可通过 |
 | NFR-4 | 冷启动到可操作 < 1 秒（框架依赖发布） |
-| NFR-5 | 单实例进程常驻内存 < 30 MB |
+| NFR-5 | 单实例进程常驻内存 < 30 MB（Private Bytes 口径；WorkingSet 受共享运行时页影响仅作参考） |
 
 ## 5. 非目标（Non-goals）
 

@@ -25,6 +25,18 @@ if (-not (Test-Path $exe)) {
 $personalize = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
 $script:failures = 0
 
+# 恢复注册表后必须广播，否则桌面视觉状态与注册表脱钩（直到下一次任意主题变更才自愈）
+Add-Type -Namespace Native -Name ThemeBroadcast -MemberDefinition @'
+[DllImport("user32.dll", SetLastError = false, CharSet = CharSet.Unicode)]
+private static extern IntPtr SendMessageTimeout(
+    IntPtr hWnd, uint Msg, IntPtr wParam, string lParam,
+    uint flags, uint timeout, out IntPtr result);
+
+public static void BroadcastThemeChange() {
+    _ = SendMessageTimeout((IntPtr)0xFFFF, 0x001A, IntPtr.Zero, "ImmersiveColorSet", 0x0002, 1000, out _);
+}
+'@
+
 function Get-ThemeValue([string]$Name) {
     return [int](Get-ItemPropertyValue -Path $personalize -Name $Name)
 }
@@ -73,6 +85,7 @@ try {
 finally {
     Set-ItemProperty -Path $personalize -Name SystemUsesLightTheme -Value $originalSystem -Type DWord
     Set-ItemProperty -Path $personalize -Name AppsUseLightTheme -Value $originalApps -Type DWord
+    [Native.ThemeBroadcast]::BroadcastThemeChange()
     Write-Host "Restored original theme: System=$originalSystem Apps=$originalApps"
 }
 

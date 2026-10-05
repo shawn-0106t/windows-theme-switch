@@ -7,12 +7,11 @@ internal static class Program
     private const string MutexName = @"Local\ThemeSwitcher.SingleInstance";
     private const string ActivateEventName = @"Local\ThemeSwitcher.Activate";
     private const int AttachParentProcess = -1;
+    private const int AsfwAny = -1;
 
     [STAThread]
     private static int Main(string[] args)
     {
-        ApplicationConfiguration.Initialize();
-
         if (args.Length > 0 && !args[0].Equals("--minimized", StringComparison.OrdinalIgnoreCase))
         {
             return RunCli(args);
@@ -25,6 +24,8 @@ internal static class Program
 
     private static int RunGui(bool startMinimized)
     {
+        ApplicationConfiguration.Initialize();
+
         using var mutex = new Mutex(initiallyOwned: false, MutexName);
         bool acquired;
         try
@@ -44,8 +45,10 @@ internal static class Program
 
         try
         {
+            // 事件必须先于窗体创建：否则窗体构造期间启动的第二实例找不到事件，静默退出
+            using var activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
             var form = new MainForm(startMinimized);
-            StartActivationListener(form);
+            StartActivationListener(form, activateEvent);
             Application.Run(form);
         }
         finally
@@ -57,26 +60,32 @@ internal static class Program
     }
 
     /// <summary>后台线程等待激活事件：第二实例启动时把已有窗口带到前台。</summary>
-    private static void StartActivationListener(MainForm form)
+    private static void StartActivationListener(MainForm form, EventWaitHandle activateEvent)
     {
         _ = form.Handle; // 提前创建句柄，后台线程才能 BeginInvoke
-        var activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
         var listener = new Thread(() =>
         {
-            while (activateEvent.WaitOne())
+            try
             {
-                try
+                while (activateEvent.WaitOne())
                 {
-                    form.BeginInvoke(() => form.ShowAndActivate());
+                    try
+                    {
+                        form.BeginInvoke(() => form.ShowAndActivate());
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        return;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        return; // 句柄已释放：应用正在退出
+                    }
                 }
-                catch (ObjectDisposedException)
-                {
-                    return;
-                }
-                catch (InvalidOperationException)
-                {
-                    return; // 句柄已释放：应用正在退出
-                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // 事件在应用退出时被释放，监听结束
             }
         })
         {
@@ -89,6 +98,8 @@ internal static class Program
     {
         if (EventWaitHandle.TryOpenExisting(ActivateEventName, out EventWaitHandle? existing))
         {
+            // 新启动进程可能持有前台权限（用户刚点击了 exe），转移给已有实例使其能真正前置窗口
+            _ = AllowSetForegroundWindow(AsfwAny);
             using (existing)
             {
                 existing.Set();
@@ -158,6 +169,9 @@ internal static class Program
 
     [DllImport("kernel32.dll")]
     private static extern bool AttachConsole(int processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool AllowSetForegroundWindow(int processId);
 
     private static void TryAttachParentConsole()
     {
