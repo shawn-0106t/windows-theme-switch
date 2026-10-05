@@ -7,6 +7,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{75E9F0C5-194
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThemeSwitcher", "src\ThemeSwitcher\ThemeSwitcher.csproj", "{45DF3C54-FF0E-409C-ABFB-4EE7CA9CEF45}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{72B25EBB-BD1B-45CA-9306-B658C1E8620A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThemeSwitcher.Tests", "tests\ThemeSwitcher.Tests\ThemeSwitcher.Tests.csproj", "{6C3C1FF5-52A3-4B00-9591-4C7C80EC5EAF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,8 +24,13 @@ Global
 		{45DF3C54-FF0E-409C-ABFB-4EE7CA9CEF45}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{45DF3C54-FF0E-409C-ABFB-4EE7CA9CEF45}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{45DF3C54-FF0E-409C-ABFB-4EE7CA9CEF45}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6C3C1FF5-52A3-4B00-9591-4C7C80EC5EAF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6C3C1FF5-52A3-4B00-9591-4C7C80EC5EAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6C3C1FF5-52A3-4B00-9591-4C7C80EC5EAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6C3C1FF5-52A3-4B00-9591-4C7C80EC5EAF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{45DF3C54-FF0E-409C-ABFB-4EE7CA9CEF45} = {75E9F0C5-194C-4C92-B06E-FED0430998FA}
+		{6C3C1FF5-52A3-4B00-9591-4C7C80EC5EAF} = {72B25EBB-BD1B-45CA-9306-B658C1E8620A}
 	EndGlobalSection
 EndGlobal

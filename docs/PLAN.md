@@ -28,6 +28,7 @@ windows-theme-switch/
 │   └── ThemeHelperTests.cs    # xunit 单元测试
 ├── scripts/
 │   ├── publish.cmd            # 一键发布
+│   ├── e2e-verify.ps1         # 端到端验证（真实切换→断言→恢复）
 │   └── make-icon.py           # .ico 生成（一次性，产物入库后脚本保留备追溯）
 └── .github/workflows/ci.yml   # CI 四门禁（阶段 6）
 ```
