@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <RootNamespace>ThemeSwitcher</RootNamespace>
+    <AssemblyName>ThemeSwitcher</AssemblyName>
+    <Version>1.0.0</Version>
+    <Product>Windows Theme Switcher</Product>
+    <Description>极简的 Windows 11 深色/浅色主题手动切换工具</Description>
+  </PropertyGroup>
+
+</Project>
