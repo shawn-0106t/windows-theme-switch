@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      # 门禁 1：格式检查
+      - name: Format check
+        run: dotnet format --verify-no-changes --no-restore
+
+      # 门禁 2：构建（csproj 已设 TreatWarningsAsErrors，零警告）
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      # 门禁 3：测试
+      - name: Test
+        run: dotnet test -c Release --no-build
+
+      # 锁文件冻结门禁不适用：src/ 零第三方 NuGet 依赖（tests/ 仅 xunit 工具链）

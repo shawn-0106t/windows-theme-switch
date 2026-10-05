@@ -8,6 +8,7 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <RootNamespace>ThemeSwitcher</RootNamespace>
     <AssemblyName>ThemeSwitcher</AssemblyName>
     <Version>1.0.0</Version>
