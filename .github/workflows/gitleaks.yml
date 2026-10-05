@@ -1,0 +1,21 @@
+name: Gitleaks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 全历史扫描
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          # 避开 8.30.x 检出回归（gitleaks #2170：规则加载但永不命中）
+          GITLEAKS_VERSION: 8.29.1
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

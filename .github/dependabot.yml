@@ -1,0 +1,24 @@
+version: 2
+
+updates:
+  # xunit 测试工具链（src/ 应用本体零依赖）
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      patch-minor:
+        update-types:
+          - patch
+          - minor
+
+  # CI 使用的 actions（checkout / setup-dotnet / gitleaks-action）
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      patch-minor:
+        update-types:
+          - patch
+          - minor
