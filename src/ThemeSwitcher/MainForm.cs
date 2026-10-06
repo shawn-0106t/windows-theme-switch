@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace ThemeSwitcher;
@@ -156,19 +157,18 @@ internal sealed class MainForm : Form
 
     private void ToggleAllThemes()
     {
-        _theme.ToggleAll();
-        OnUserThemeApplied();
+        ShowHintOnce();
+        _ = Task.Run(() => _theme.ToggleAll());
     }
 
     private void ApplyChange(bool? systemLight, bool? appsLight)
     {
-        _theme.SetTheme(systemLight, appsLight);
-        OnUserThemeApplied();
+        ShowHintOnce();
+        _ = Task.Run(() => _theme.SetTheme(systemLight, appsLight));
     }
 
-    private void OnUserThemeApplied()
+    private void ShowHintOnce()
     {
-        RefreshAll();
         if (!_hintShown)
         {
             _hintShown = true;
@@ -261,7 +261,10 @@ internal sealed class MainForm : Form
         if (m.Msg == WmSettingChange && m.LParam != IntPtr.Zero
             && Marshal.PtrToStringAuto(m.LParam) == ImmersiveColorSet)
         {
-            RefreshAll();
+            // 延迟到消息队列尾再刷新：广播是同步逐窗口送达的，此处 inline 执行
+            // RefreshAll 会嵌套向 Explorer 发 Shell_NotifyIcon（托盘图标重绘），
+            // 打断其正在进行的主题变更处理，导致任务栏（主/副屏）滞后一拍不刷新
+            BeginInvoke(RefreshAll);
         }
 
         base.WndProc(ref m);

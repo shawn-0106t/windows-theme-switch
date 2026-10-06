@@ -141,11 +141,25 @@ internal static class Program
                         return 2;
                 }
 
+            case "--set-sys" when args.Count == 2 && IsMode(args[1]):
+                helper.SetTheme(systemLight: args[1].Equals("light", StringComparison.OrdinalIgnoreCase), appsLight: null);
+                PrintState(helper.ReadState());
+                return 0;
+
+            case "--set-apps" when args.Count == 2 && IsMode(args[1]):
+                helper.SetTheme(systemLight: null, appsLight: args[1].Equals("light", StringComparison.OrdinalIgnoreCase));
+                PrintState(helper.ReadState());
+                return 0;
+
             default:
                 PrintUsage();
                 return 2;
         }
     }
+
+    private static bool IsMode(string value) =>
+        value.Equals("light", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("dark", StringComparison.OrdinalIgnoreCase);
 
     private static void PrintState(ThemeState state)
     {
@@ -163,6 +177,8 @@ internal static class Program
               ThemeSwitcher.exe --toggle      Toggle Windows + apps theme, then exit
               ThemeSwitcher.exe --set dark    Set both to dark, then exit
               ThemeSwitcher.exe --set light   Set both to light, then exit
+              ThemeSwitcher.exe --set-sys dark|light    Set Windows mode only, then exit
+              ThemeSwitcher.exe --set-apps dark|light   Set apps mode only, then exit
               ThemeSwitcher.exe --status      Print current theme state
             """);
     }

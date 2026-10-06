@@ -29,6 +29,27 @@ v1.0 已交付：主窗口一键全切 + Windows/应用模式独立开关、托�
 （三条切换路径 × 双向，见下方"验证方法"）。若 A+B 组合仍偶发残留，按方案 C 加托盘
 "修复主题"手动项即可收敛。
 
+**第二轮深挖（2026-10-06 下午，用户反馈"任务栏仍然有 bug"后）**——上游 bug 比原记录更深：
+
+- **实测规律**（视觉采样自动化验证，`scripts/verify-secondary-taskbar.ps1` / `verify-gui-path.ps1`）：
+  - CLI 形态切换（无 GUI 实例运行）：16/16 稳定生效，主/副屏全跟随
+  - **GUI 实例的第一次切换：8/8 必触发任务栏 partial/冻结**（主/副屏部分区域滞留，
+    后续任何广播——含外部进程——都无法唤醒；与 ADM #1172"typically partial"+"重启
+    explorer 才恢复"完全吻合）；冻结态连 CLI 也失效，`rundll32 user32.dll,UpdatePerUserSystemParameters`
+    +广播或较长 idle 可解冻
+  - GUI 会话内第二次起的切换恢复有效
+- **已证伪假说**（均实验排除）：副屏任务栏窗口类名错误（实测确认就是 Shell_SecondaryTrayWnd）、
+  托盘图标更新竞争、WndProc 嵌套刷新（改 BeginInvoke 无效）、UI 线程阻塞（改后台线程无效）、
+  切换挪至 CLI 子进程（GUI 启动的子进程同样触发）、UseShellExecute 启动、窗口先激活再点击、
+  启动时等值预热（Explorer 不对无变化值走渲染路径）、PostMessage 异步广播（lParam 跨进程
+  无效，任务栏直接忽略）
+- **本轮落地**：GUI 切换改为后台线程执行（不卡 UI，且为"第二次起有效"的形态）；WndProc
+  自刷新改 BeginInvoke（消除广播内嵌套 UI 工作）；CLI 新增 `--set-sys` / `--set-apps`
+  单模式参数；两个视觉验证脚本入库（自动化复现/回归本问题，不再依赖人眼）
+- **后续候选**：等 Windows 上游修复；把"GUI 进程首次切换触发冻结"数据反馈到
+  AutoDarkMode #1172（ADM 常驻 GUI 形态与本规律一致）；方案 C 的重启 explorer 兜底
+  （破坏性，默认不做）
+
 <details>
 <summary>原始交接内容（复现 / 根因 / 候选方案，供回溯）</summary>
 
