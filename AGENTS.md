@@ -34,7 +34,8 @@ dotnet build                        # 必须零警告
 dotnet test                         # 11+ 单测
 dotnet format --verify-no-changes   # CI 门禁
 pwsh scripts/e2e-verify.ps1         # 端到端（切主题后自动恢复；需先 Debug build）
-cmd //c scripts\\publish.cmd        # 发布单文件 exe（bin/Release/net8.0-windows/win-x64/publish/）
+cmd //c scripts\\publish.cmd        # 本地构建单文件 exe（bin/Release/net8.0-windows/win-x64/publish/）
+git tag v1.x.x && git push origin v1.x.x   # 正式发布：触发 release workflow（tag 须等于 csproj Version）
 PYTHONUTF8=1 python scripts/make-icon.py   # 修改图标设计后重生成 src/ThemeSwitcher/app.ico
 ```
 
