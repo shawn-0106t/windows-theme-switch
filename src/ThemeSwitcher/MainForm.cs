@@ -46,7 +46,22 @@ internal sealed class MainForm : Form
             exitApp: RequestExit);
 
         _ = Handle; // 提前创建句柄：WndProc 才能收到主题广播，DWM 标题栏才可设置
+        DockNearTray();
         RefreshAll();
+    }
+
+    /// <summary>按任务栏位置把窗口对齐到托盘附近（FR-11）。每次显示都重新贴靠，行为可预测。</summary>
+    private void DockNearTray()
+    {
+        Location = TrayDocking.GetDockedLocation(Size);
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        // 构造期取到的 Size 可能尚未完成 DPI/字体缩放（右下锚点会溢出屏幕）；
+        // Load 时缩放已结束且窗口仍不可见，此处校正无闪烁，兜住首次显示路径
+        DockNearTray();
     }
 
     private void InitializeComponent()
@@ -60,7 +75,7 @@ internal sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        StartPosition = FormStartPosition.CenterScreen;
+        StartPosition = FormStartPosition.Manual; // 位置由贴靠托盘逻辑接管（FR-11）
         Font = new Font("Microsoft YaHei UI", 9F);
 
         _lblStatus.SetBounds(16, 12, 304, 24);
@@ -127,6 +142,7 @@ internal sealed class MainForm : Form
     public void ShowAndActivate()
     {
         _startMinimized = false;
+        DockNearTray();
         Show();
         if (WindowState == FormWindowState.Minimized)
         {
