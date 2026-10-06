@@ -13,7 +13,8 @@ public sealed class ThemeHelperTests : IDisposable
     private const string SandboxPersonalize = SandboxRoot + @"\Personalize";
     private const string SandboxRun = SandboxRoot + @"\Run";
 
-    private readonly ThemeHelper _helper = new(SandboxPersonalize, SandboxRun, broadcast: false);
+    // reapplyDelayMs=0：常规用例跳过延迟重写路径（避免每例多等 120ms），重写路径由专门用例覆盖
+    private readonly ThemeHelper _helper = new(SandboxPersonalize, SandboxRun, broadcast: false, reapplyDelayMs: 0);
 
     public ThemeHelperTests()
     {
@@ -91,6 +92,85 @@ public sealed class ThemeHelperTests : IDisposable
 
         Assert.Null(ReadRaw(SandboxPersonalize, "SystemUsesLightTheme"));
         Assert.Null(ReadRaw(SandboxPersonalize, "AppsUseLightTheme"));
+    }
+
+    [Fact]
+    public void SetTheme_WithReapplyDelay_SynchronousReapplyWritesValues()
+    {
+        // 覆盖生产配置的延迟重写路径（broadcast 关闭，不干扰桌面）。
+        // 断言耗时证明延迟被同步等待（返回前完成），而非 fire-and-forget 被 CLI 进程退出截断。
+        var slowHelper = new ThemeHelper(SandboxPersonalize, SandboxRun, broadcast: false, reapplyDelayMs: 30);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        slowHelper.SetTheme(systemLight: false, appsLight: true);
+
+        watch.Stop();
+        Assert.True(
+            watch.ElapsedMilliseconds >= 30,
+            $"reapply delay was not awaited synchronously (elapsed {watch.ElapsedMilliseconds}ms)");
+        Assert.Equal(0, ReadRaw(SandboxPersonalize, "SystemUsesLightTheme"));
+        Assert.Equal(1, ReadRaw(SandboxPersonalize, "AppsUseLightTheme"));
+    }
+
+    [Fact]
+    public void SetTheme_ReapplySkipped_WhenRegistryChangedDuringDelay()
+    {
+        // 延迟窗口内"外部"（其他实例/设置页）写入新值时，重写让位不覆盖：
+        // 首次写 system=false/apps=true，延迟期内外部改 apps=false，旧目标值不得被写回
+        var racingHelper = new ThemeHelper(SandboxPersonalize, SandboxRun, broadcast: false, reapplyDelayMs: 120);
+
+        bool externalWriteDone = false;
+        var writer = new Thread(() =>
+        {
+            // 等首次写入两个值都落地（避免抢在首次写入前被覆盖），再模拟外部切换。
+            // 设上限防未来回归导致首写不落地时 Join 无限挂起
+            var deadline = System.Diagnostics.Stopwatch.StartNew();
+            while ((ReadRaw(SandboxPersonalize, "SystemUsesLightTheme") is not 0
+                    || ReadRaw(SandboxPersonalize, "AppsUseLightTheme") is not 1)
+                && deadline.ElapsedMilliseconds < 5000)
+            {
+                Thread.Sleep(2);
+            }
+
+            using RegistryKey key = Registry.CurrentUser.CreateSubKey(SandboxPersonalize, writable: true);
+            key.SetValue("AppsUseLightTheme", 0, RegistryValueKind.DWord);
+            externalWriteDone = true;
+        })
+        {
+            IsBackground = true,
+        };
+        writer.Start();
+
+        racingHelper.SetTheme(systemLight: false, appsLight: true);
+
+        writer.Join();
+        Assert.True(externalWriteDone);
+        Assert.Equal(0, ReadRaw(SandboxPersonalize, "SystemUsesLightTheme")); // 首次写入保留
+        Assert.Equal(0, ReadRaw(SandboxPersonalize, "AppsUseLightTheme"));    // 外部新值未被重写覆盖
+    }
+
+    [Fact]
+    public void Constructor_NegativeReapplyDelay_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new ThemeHelper(SandboxPersonalize, SandboxRun, broadcast: false, reapplyDelayMs: -1));
+    }
+
+    [Fact]
+    public void RepairTheme_RewritesCurrentValuesAsDword()
+    {
+        _helper.SetTheme(systemLight: false, appsLight: true);
+        // 把 apps 值改坏为非 DWORD：修复的等值重写必须把它写回 DWord（证明写入确实发生，
+        // 而非 no-op 也通过断言）
+        using (RegistryKey key = Registry.CurrentUser.CreateSubKey(SandboxPersonalize))
+        {
+            key.SetValue("AppsUseLightTheme", "corrupted", RegistryValueKind.String);
+        }
+
+        _helper.RepairTheme(refreshSystemParams: false);
+
+        Assert.Equal(0, ReadRaw(SandboxPersonalize, "SystemUsesLightTheme"));
+        Assert.Equal(1, ReadRaw(SandboxPersonalize, "AppsUseLightTheme"));
     }
 
     [Fact]

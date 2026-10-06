@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Win32;
 
 namespace ThemeSwitcher;
@@ -21,21 +23,37 @@ public sealed class ThemeHelper
 
     public const string AutoStartValueName = "ThemeSwitcher";
 
+    /// <summary>主任务栏窗口类名（TrayDocking 定位托盘屏幕时复用）。</summary>
+    public const string TrayWndClass = "Shell_TrayWnd";
+
     private const string BroadcastParam = "ImmersiveColorSet";
+    private const string SecondaryTrayWndClass = "Shell_SecondaryTrayWnd";
     private const uint WmSettingChange = 0x001A;
     private const uint SmtoAbortIfHung = 0x0002;
     private const uint BroadcastTimeoutMs = 1000;
+
+    // 任务栏窗口正常毫秒级响应，无需长超时。SetTheme 全程同步，最坏阻塞预算：
+    // 2 轮 × (广播重试 2×1000ms + N 个任务栏窗口 × 200ms) + 120ms 延迟，正常情况 <150ms
+    private const uint TaskbarNotifyTimeoutMs = 200;
+    private const int DefaultReapplyDelayMs = 120;
     private static readonly IntPtr HwndBroadcast = new(0xFFFF);
 
     private readonly string _personalizePath;
     private readonly string _runKeyPath;
     private readonly bool _broadcast;
+    private readonly int _reapplyDelayMs;
 
-    public ThemeHelper(string? personalizePath = null, string? runKeyPath = null, bool broadcast = true)
+    public ThemeHelper(
+        string? personalizePath = null,
+        string? runKeyPath = null,
+        bool broadcast = true,
+        int reapplyDelayMs = DefaultReapplyDelayMs)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(reapplyDelayMs);
         _personalizePath = personalizePath ?? DefaultPersonalizePath;
         _runKeyPath = runKeyPath ?? DefaultRunKeyPath;
         _broadcast = broadcast;
+        _reapplyDelayMs = reapplyDelayMs;
     }
 
     public ThemeState ReadState()
@@ -45,7 +63,10 @@ public sealed class ThemeHelper
             ReadLightFlag("AppsUseLightTheme"));
     }
 
-    /// <summary>写入主题值并广播。传 null 表示对应模式保持不变。</summary>
+    /// <summary>
+    /// 写入主题值并广播。传 null 表示对应模式保持不变。
+    /// 整个过程同步完成（含延迟补发），保证 CLI 进程退出前所有变更通知已发出。
+    /// </summary>
     public void SetTheme(bool? systemLight, bool? appsLight)
     {
         if (systemLight is null && appsLight is null)
@@ -53,6 +74,38 @@ public sealed class ThemeHelper
             return;
         }
 
+        WriteThemeValues(systemLight, appsLight);
+        BroadcastSettingChange();
+        NotifyTaskbarWindows();
+
+        // 多屏下副屏任务栏经常不处理首次 ImmersiveColorSet 广播（Windows 上游 bug，
+        // AutoDarkMode #1172 同款）：延迟重写相同值并二次广播，等价于"重新应用一次主题"。
+        // 必须同步执行：SetTheme 的调用方（含 CLI）返回后进程可能随即退出。
+        if (_reapplyDelayMs > 0)
+        {
+            Thread.Sleep(_reapplyDelayMs);
+            // 延迟窗口内外部可能已写入新值（设置页/另一 CLI 实例）：让位新切换，不再覆盖
+            if (!IsCurrentStateUnchanged(systemLight, appsLight))
+            {
+                return;
+            }
+
+            WriteThemeValues(systemLight, appsLight);
+            BroadcastSettingChange();
+            NotifyTaskbarWindows();
+        }
+    }
+
+    /// <summary>本次 SetTheme 涉及的键在延迟后是否仍保持首次写入的值（未涉及的键忽略）。</summary>
+    private bool IsCurrentStateUnchanged(bool? systemLight, bool? appsLight)
+    {
+        ThemeState current = ReadState();
+        return (systemLight is not { } system || current.SystemUsesLightTheme == system)
+            && (appsLight is not { } apps || current.AppsUseLightTheme == apps);
+    }
+
+    private void WriteThemeValues(bool? systemLight, bool? appsLight)
+    {
         using RegistryKey key = Registry.CurrentUser.CreateSubKey(_personalizePath, writable: true);
         if (systemLight is { } system)
         {
@@ -63,8 +116,6 @@ public sealed class ThemeHelper
         {
             key.SetValue("AppsUseLightTheme", apps ? 1 : 0, RegistryValueKind.DWord);
         }
-
-        BroadcastSettingChange();
     }
 
     /// <summary>Windows 模式与应用模式同时取反（一键全切）。</summary>
@@ -72,6 +123,47 @@ public sealed class ThemeHelper
     {
         ThemeState state = ReadState();
         SetTheme(!state.SystemUsesLightTheme, !state.AppsUseLightTheme);
+    }
+
+    /// <summary>
+    /// 手动"修复主题"：任务栏因上游 bug 滞留/partial 渲染时的一键唤醒。
+    /// 序列：等值重写（走完整 SetTheme 的广播+定向补发+reapply）→ 系统参数全量刷新
+    /// （UpdatePerUserSystemParameters，实测可解除任务栏"冻结"）→ 再广播兜底。
+    /// 等值重写对正常状态无视觉影响。
+    /// </summary>
+    public void RepairTheme(bool refreshSystemParams = true)
+    {
+        ThemeState current = ReadState();
+        SetTheme(current.SystemUsesLightTheme, current.AppsUseLightTheme);
+        if (refreshSystemParams)
+        {
+            RefreshPerUserSystemParams();
+        }
+
+        BroadcastSettingChange();
+    }
+
+    private static void RefreshPerUserSystemParams()
+    {
+        try
+        {
+            // 绝对路径限定 System32：避免应用目录/CWD 内同名 exe 被 CreateProcess 优先解析
+            string rundll32 = Path.Combine(Environment.SystemDirectory, "rundll32.exe");
+            using Process? process = Process.Start(new ProcessStartInfo(
+                rundll32, "user32.dll,UpdatePerUserSystemParameters")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+            if (process is not null && !process.WaitForExit(5000))
+            {
+                process.Kill();
+            }
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // rundll32 不可用等极端情况：跳过刷新，靠广播兜底
+        }
     }
 
     // ---- 开机自启（HKCU Run，无需管理员权限）----
@@ -128,6 +220,46 @@ public sealed class ThemeHelper
             SmtoAbortIfHung, BroadcastTimeoutMs, out _) != IntPtr.Zero;
     }
 
+    /// <summary>
+    /// 向主/副任务栏窗口定向补发一次 WM_SETTINGCHANGE：HWND_BROADCAST 之外再显式送达，
+    /// 提高副屏任务栏（Shell_SecondaryTrayWnd）错过广播时的命中率。尽力而为，失败不影响切换结果。
+    /// </summary>
+    private void NotifyTaskbarWindows()
+    {
+        if (!_broadcast)
+        {
+            return;
+        }
+
+        foreach (IntPtr hwnd in EnumerateTaskbarWindows())
+        {
+            _ = SendMessageTimeout(
+                hwnd, WmSettingChange, IntPtr.Zero, BroadcastParam,
+                SmtoAbortIfHung, TaskbarNotifyTimeoutMs, out _);
+        }
+    }
+
+    /// <summary>
+    /// 枚举所有任务栏顶层窗口。EnumWindows 而非 FindWindow：多显示器时
+    /// Shell_SecondaryTrayWnd 可能有多个实例（每块副屏一个）。
+    /// </summary>
+    private static List<IntPtr> EnumerateTaskbarWindows()
+    {
+        var handles = new List<IntPtr>();
+        _ = EnumWindows((hwnd, _) =>
+        {
+            var className = new StringBuilder(256);
+            if (GetClassName(hwnd, className, className.Capacity) > 0
+                && className.ToString() is TrayWndClass or SecondaryTrayWndClass)
+            {
+                handles.Add(hwnd);
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        return handles;
+    }
+
     /// <summary>让窗口标题栏跟随深/浅色（DWM）。</summary>
     public static void ApplyTitleBarTheme(Form form, bool darkTitleBar)
     {
@@ -144,6 +276,14 @@ public sealed class ThemeHelper
     private static extern IntPtr SendMessageTimeout(
         IntPtr hWnd, uint msg, IntPtr wParam, string lParam,
         uint flags, uint timeoutMs, out IntPtr result);
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = false)]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = false, CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(
