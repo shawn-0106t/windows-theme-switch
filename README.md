@@ -29,6 +29,14 @@ pwsh scripts/e2e-verify.ps1   # 端到端验证（会短暂真实切换主题并
 
 ## 发布
 
+正式发布走 workflow：推 `v*` tag 触发 `.github/workflows/release.yml`（三门禁 → 校验 tag 与 csproj `<Version>` 一致 → 构建单文件 exe → 出处证明 → **草稿** release，润色 notes 后手动发布）。发 tag 前记得先 bump `src/ThemeSwitcher/ThemeSwitcher.csproj` 的 `<Version>`。
+
+```bash
+git tag v1.x.x && git push origin v1.x.x
+```
+
+本地构建（调试用）：
+
 ```cmd
 scripts\publish.cmd
 ```

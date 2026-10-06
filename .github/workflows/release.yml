@@ -1,0 +1,63 @@
+name: Release
+
+# 推 v* tag 触发：三门禁 → tag 与 csproj 版本一致性校验 → 发布单文件 exe →
+# 出处证明 → 草稿 release（人工润色 notes 后手动发布）
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write      # gh release create + 上传附件
+  id-token: write      # artifact attestation
+  attestations: write  # artifact attestation
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      # 与 ci.yml 相同的三门禁：tag 上的代码必须过同样的关
+      - name: Restore
+        run: dotnet restore
+
+      - name: Format check
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Test
+        run: dotnet test -c Release --no-build
+
+      # tag 版本必须与 csproj Version 一致（如 v1.1.0 ↔ 1.1.0），防止发错版本
+      - name: Verify tag matches version
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME.TrimStart('v')
+          [xml]$csproj = Get-Content src/ThemeSwitcher/ThemeSwitcher.csproj
+          $ver = ($csproj.Project.PropertyGroup | Where-Object { $_.Version }).Version
+          if ($tag -ne $ver) { throw "tag $env:GITHUB_REF_NAME 与 csproj Version ($ver) 不一致" }
+
+      # 与 scripts/publish.cmd 同款：框架依赖单文件 exe
+      - name: Publish single-file exe
+        run: dotnet publish src/ThemeSwitcher -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
+
+      # 产物出处证明：runner 构建背书，用户可验证 exe 来自该 tag 的源码
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: src/ThemeSwitcher/bin/Release/net8.0-windows/win-x64/publish/ThemeSwitcher.exe
+
+      # 草稿 release：自动生成的 notes 供人工润色，确认后再发布
+      - name: Create draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME --title $env:GITHUB_REF_NAME --generate-notes --draft "src/ThemeSwitcher/bin/Release/net8.0-windows/win-x64/publish/ThemeSwitcher.exe"
