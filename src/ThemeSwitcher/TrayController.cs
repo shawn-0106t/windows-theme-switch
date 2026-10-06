@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace ThemeSwitcher;
 
 /// <summary>
-/// 系统托盘（FR-4）：左键一键全切，右键菜单（显示/切换/开机自启/退出），
+/// 系统托盘（FR-4）：左键一键全切，右键菜单（显示/切换/修复主题/开机自启/退出），
 /// 图标随当前主题重绘（左半圆 = 当前主题色）。
 /// </summary>
 internal sealed class TrayController : IDisposable
@@ -23,6 +23,7 @@ internal sealed class TrayController : IDisposable
     public TrayController(
         Action showWindow,
         Action toggleTheme,
+        Action repairTheme,
         Func<bool> isAutoStart,
         Action<bool> setAutoStart,
         Action exitApp)
@@ -36,6 +37,7 @@ internal sealed class TrayController : IDisposable
         [
             new ToolStripMenuItem("显示主窗口", null, (_, _) => showWindow()),
             new ToolStripMenuItem("切换主题", null, (_, _) => toggleTheme()),
+            new ToolStripMenuItem("修复主题", null, (_, _) => repairTheme()),
             new ToolStripSeparator(),
             _autoStartItem,
             new ToolStripSeparator(),

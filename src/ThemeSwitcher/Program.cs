@@ -151,6 +151,11 @@ internal static class Program
                 PrintState(helper.ReadState());
                 return 0;
 
+            case "--repair":
+                helper.RepairTheme();
+                Console.WriteLine("Theme repair applied.");
+                return 0;
+
             default:
                 PrintUsage();
                 return 2;
@@ -179,6 +184,7 @@ internal static class Program
               ThemeSwitcher.exe --set light   Set both to light, then exit
               ThemeSwitcher.exe --set-sys dark|light    Set Windows mode only, then exit
               ThemeSwitcher.exe --set-apps dark|light   Set apps mode only, then exit
+              ThemeSwitcher.exe --repair      Re-apply current theme to wake a stuck taskbar
               ThemeSwitcher.exe --status      Print current theme state
             """);
     }

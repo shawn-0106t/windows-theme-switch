@@ -6,7 +6,7 @@
 
 - **一键全切**：大按钮同时切换 Windows 模式与应用模式
 - **独立开关**：Windows 模式 / 应用模式可分别设置，支持"系统深色 + 应用浅色"等任意组合
-- **托盘常驻**：点窗口 ✕ 最小化到系统托盘；托盘**左键单击 = 一键全切**；右键菜单支持显示主窗口、切换主题、开机自启开关、退出
+- **托盘常驻**：点窗口 ✕ 最小化到系统托盘；托盘**左键单击 = 一键全切**；右键菜单支持显示主窗口、切换主题、修复主题、开机自启开关、退出
 - **即时生效**：切换后任务栏、开始菜单与支持主题的应用立刻跟随，无需注销
 - **外部感知**：在系统设置页手动改主题时，本工具的状态与托盘图标自动同步
 - **单实例**：重复启动自动激活已有窗口
@@ -44,6 +44,9 @@ scripts\publish.cmd
 | `ThemeSwitcher.exe --toggle` | Windows 模式 + 应用模式同时取反，然后退出 |
 | `ThemeSwitcher.exe --set dark` | 两个模式都设为深色，然后退出 |
 | `ThemeSwitcher.exe --set light` | 两个模式都设为浅色，然后退出 |
+| `ThemeSwitcher.exe --set-sys dark\|light` | 仅设置 Windows 模式，然后退出 |
+| `ThemeSwitcher.exe --set-apps dark\|light` | 仅设置应用模式，然后退出 |
+| `ThemeSwitcher.exe --repair` | 重新应用当前主题（任务栏偶发不跟随时的一键修复，见下文"已知限制"） |
 | `ThemeSwitcher.exe --status` | 输出当前状态（`System=Dark Apps=Light`） |
 
 ## 工作原理
@@ -57,6 +60,10 @@ HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize
 ```
 
 写入后向系统广播 `WM_SETTINGCHANGE("ImmersiveColorSet")`，Explorer 与支持的应用即时重绘——与系统设置页自身使用的机制相同，均为 Windows 官方文档化行为。
+
+## 已知限制（Windows 上游 bug）
+
+多显示器下任务栏偶尔不跟随主题切换（Windows 11 自身问题，[AutoDarkMode #1172](https://github.com/AutoDarkMode/Windows-Auto-Night-Mode/issues/1172) 同款，重启 explorer 才彻底恢复）。本项目已内置缓解（二次广播 + 任务栏窗口定向补发 + 切换后台线程化），并在托盘菜单与 CLI 提供"修复主题"兜底；若任务栏仍偶发滞留，再切一次或执行一次"修复主题"通常可恢复。诊断细节见 `docs/HANDOFF.md`。
 
 ## CI
 

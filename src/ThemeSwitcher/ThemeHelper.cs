@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
@@ -122,6 +123,47 @@ public sealed class ThemeHelper
     {
         ThemeState state = ReadState();
         SetTheme(!state.SystemUsesLightTheme, !state.AppsUseLightTheme);
+    }
+
+    /// <summary>
+    /// 手动"修复主题"：任务栏因上游 bug 滞留/partial 渲染时的一键唤醒。
+    /// 序列：等值重写（走完整 SetTheme 的广播+定向补发+reapply）→ 系统参数全量刷新
+    /// （UpdatePerUserSystemParameters，实测可解除任务栏"冻结"）→ 再广播兜底。
+    /// 等值重写对正常状态无视觉影响。
+    /// </summary>
+    public void RepairTheme(bool refreshSystemParams = true)
+    {
+        ThemeState current = ReadState();
+        SetTheme(current.SystemUsesLightTheme, current.AppsUseLightTheme);
+        if (refreshSystemParams)
+        {
+            RefreshPerUserSystemParams();
+        }
+
+        BroadcastSettingChange();
+    }
+
+    private static void RefreshPerUserSystemParams()
+    {
+        try
+        {
+            // 绝对路径限定 System32：避免应用目录/CWD 内同名 exe 被 CreateProcess 优先解析
+            string rundll32 = Path.Combine(Environment.SystemDirectory, "rundll32.exe");
+            using Process? process = Process.Start(new ProcessStartInfo(
+                rundll32, "user32.dll,UpdatePerUserSystemParameters")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+            if (process is not null && !process.WaitForExit(5000))
+            {
+                process.Kill();
+            }
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // rundll32 不可用等极端情况：跳过刷新，靠广播兜底
+        }
     }
 
     // ---- 开机自启（HKCU Run，无需管理员权限）----
