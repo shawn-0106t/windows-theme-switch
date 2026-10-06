@@ -14,7 +14,7 @@ jobs:
         with:
           fetch-depth: 0 # 全历史扫描
 
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           # 避开 8.30.x 检出回归（gitleaks #2170：规则加载但永不命中）
           GITLEAKS_VERSION: 8.29.1
