@@ -81,6 +81,10 @@ try {
     Assert-Theme 1 0 '--toggle keeps mixed state (flipped)'
 
     Invoke-App @('--status')
+
+    # 修复主题：等值重写不改变当前值，退出码必须为 0（覆盖 rundll32 路径）
+    Invoke-App @('--repair')
+    Assert-Theme 1 0 '--repair keeps current values'
 }
 finally {
     Set-ItemProperty -Path $personalize -Name SystemUsesLightTheme -Value $originalSystem -Type DWord

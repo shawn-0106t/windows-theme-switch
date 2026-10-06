@@ -157,6 +157,23 @@ public sealed class ThemeHelperTests : IDisposable
     }
 
     [Fact]
+    public void RepairTheme_RewritesCurrentValuesAsDword()
+    {
+        _helper.SetTheme(systemLight: false, appsLight: true);
+        // 把 apps 值改坏为非 DWORD：修复的等值重写必须把它写回 DWord（证明写入确实发生，
+        // 而非 no-op 也通过断言）
+        using (RegistryKey key = Registry.CurrentUser.CreateSubKey(SandboxPersonalize))
+        {
+            key.SetValue("AppsUseLightTheme", "corrupted", RegistryValueKind.String);
+        }
+
+        _helper.RepairTheme(refreshSystemParams: false);
+
+        Assert.Equal(0, ReadRaw(SandboxPersonalize, "SystemUsesLightTheme"));
+        Assert.Equal(1, ReadRaw(SandboxPersonalize, "AppsUseLightTheme"));
+    }
+
+    [Fact]
     public void ToggleAll_FlipsBothValues()
     {
         _helper.SetTheme(systemLight: true, appsLight: true);

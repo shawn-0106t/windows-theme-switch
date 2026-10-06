@@ -42,6 +42,7 @@ internal sealed class MainForm : Form
         _tray = new TrayController(
             showWindow: ShowAndActivate,
             toggleTheme: ToggleAllThemes,
+            repairTheme: RepairTheme,
             isAutoStart: () => _theme.IsAutoStartEnabled(),
             setAutoStart: _theme.SetAutoStart,
             exitApp: RequestExit);
@@ -165,6 +166,29 @@ internal sealed class MainForm : Form
     {
         ShowHintOnce();
         _ = Task.Run(() => _theme.SetTheme(systemLight, appsLight));
+    }
+
+    /// <summary>
+    /// 手动"修复主题"（FR-4 菜单项 / CLI --repair）：后台执行 RepairTheme——
+    /// 等值重写+系统参数刷新+广播，唤醒因上游 bug 滞留的任务栏，正常状态下无视觉影响。
+    /// </summary>
+    private void RepairTheme()
+    {
+        _ = Task.Run(() =>
+        {
+            _theme.RepairTheme();
+            try
+            {
+                BeginInvoke(RefreshAll);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+                // 句柄已释放：应用正在退出
+            }
+        });
     }
 
     private void ShowHintOnce()
