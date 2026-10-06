@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace ThemeSwitcher;
@@ -46,7 +47,22 @@ internal sealed class MainForm : Form
             exitApp: RequestExit);
 
         _ = Handle; // 提前创建句柄：WndProc 才能收到主题广播，DWM 标题栏才可设置
+        DockNearTray();
         RefreshAll();
+    }
+
+    /// <summary>按任务栏位置把窗口对齐到托盘附近（FR-11）。每次显示都重新贴靠，行为可预测。</summary>
+    private void DockNearTray()
+    {
+        Location = TrayDocking.GetDockedLocation(Size);
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        // 构造期取到的 Size 可能尚未完成 DPI/字体缩放（右下锚点会溢出屏幕）；
+        // Load 时缩放已结束且窗口仍不可见，此处校正无闪烁，兜住首次显示路径
+        DockNearTray();
     }
 
     private void InitializeComponent()
@@ -60,7 +76,7 @@ internal sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        StartPosition = FormStartPosition.CenterScreen;
+        StartPosition = FormStartPosition.Manual; // 位置由贴靠托盘逻辑接管（FR-11）
         Font = new Font("Microsoft YaHei UI", 9F);
 
         _lblStatus.SetBounds(16, 12, 304, 24);
@@ -127,6 +143,7 @@ internal sealed class MainForm : Form
     public void ShowAndActivate()
     {
         _startMinimized = false;
+        DockNearTray();
         Show();
         if (WindowState == FormWindowState.Minimized)
         {
@@ -140,19 +157,18 @@ internal sealed class MainForm : Form
 
     private void ToggleAllThemes()
     {
-        _theme.ToggleAll();
-        OnUserThemeApplied();
+        ShowHintOnce();
+        _ = Task.Run(() => _theme.ToggleAll());
     }
 
     private void ApplyChange(bool? systemLight, bool? appsLight)
     {
-        _theme.SetTheme(systemLight, appsLight);
-        OnUserThemeApplied();
+        ShowHintOnce();
+        _ = Task.Run(() => _theme.SetTheme(systemLight, appsLight));
     }
 
-    private void OnUserThemeApplied()
+    private void ShowHintOnce()
     {
-        RefreshAll();
         if (!_hintShown)
         {
             _hintShown = true;
@@ -245,7 +261,10 @@ internal sealed class MainForm : Form
         if (m.Msg == WmSettingChange && m.LParam != IntPtr.Zero
             && Marshal.PtrToStringAuto(m.LParam) == ImmersiveColorSet)
         {
-            RefreshAll();
+            // 延迟到消息队列尾再刷新：广播是同步逐窗口送达的，此处 inline 执行
+            // RefreshAll 会嵌套向 Explorer 发 Shell_NotifyIcon（托盘图标重绘），
+            // 打断其正在进行的主题变更处理，导致任务栏（主/副屏）滞后一拍不刷新
+            BeginInvoke(RefreshAll);
         }
 
         base.WndProc(ref m);

@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 文档版本 | v1.1 |
-| 日期 | 2026-10-05 |
+| 文档版本 | v1.2 |
+| 日期 | 2026-10-06 |
 | 状态 | 已确认（需求冻结基线） |
 | 适用平台 | Windows 11（Windows 10 1809+ 原理兼容，非测试目标） |
 
@@ -38,9 +38,10 @@ Windows 11 切换深色/浅色主题需要打开 `设置 > 个性化 > 颜色` �
 | FR-5 | 开机自启 | 托盘菜单内 toggle 控制，写 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`，默认关闭 |
 | FR-6 | 单实例 | 命名 Mutex 防双开；重复启动时激活已有实例窗口后自行退出 |
 | FR-7 | `--minimized` 启动参数 | 启动直接进托盘不显示窗口（供开机自启使用） |
-| FR-8 | 即时生效 | 切换后任务栏、开始菜单及支持主题的应用无需注销/重启即时生效 |
+| FR-8 | 即时生效 | 切换后任务栏、开始菜单及支持主题的应用无需注销/重启即时生效；多屏下副屏任务栏偶发滞留为 Windows 上游 bug，以"延迟重写相同值 + 二次广播 + 任务栏窗口定向补发"缓解（机制见 6.1） |
 | FR-9 | 标题栏跟随 | 本应用自身标题栏明暗随系统主题（`DWMWA_USE_IMMERSIVE_DARK_MODE`） |
 | FR-10 | CLI 模式 | 无窗口执行后退出，输出 ASCII（如 `System=Dark Apps=Light`）：`--toggle` 一键全切 / `--set dark\|light` 双模式同设 / `--status` 查询状态。供脚本自动化与端到端验证使用；不受单实例限制（与已运行 GUI 实例通过广播自然同步） |
+| FR-11 | 紧靠托盘显示 | 主窗口启动、托盘"显示主窗口"与第二实例激活时，窗口定位到任务栏所在屏幕工作区靠托盘一侧的角（底部任务栏 = 托盘正上方，边距 8px）；每次显示都重新贴靠（v1.1 不记忆用户拖动位置） |
 
 ## 4. 非功能需求（NFR）
 
@@ -86,12 +87,15 @@ SendMessageTimeout(
 
 以上即系统设置页自身的公开机制（注册表路径与广播参数均为 Windows 官方文档化行为），无未公开 API。
 
+**多屏副任务栏缓解**（FR-8）：Windows 上游 bug 导致副屏任务栏经常不处理单次 `ImmersiveColorSet` 广播（AutoDarkMode [#1172](https://github.com/AutoDarkMode/Windows-Auto-Night-Mode/issues/1172) 同款）。每次切换在首次广播后同步执行：① 向 `Shell_TrayWnd` / `Shell_SecondaryTrayWnd`（`EnumWindows` 枚举全部实例）定向补发一次 `WM_SETTINGCHANGE`；② 延迟约 120ms 重写两个 DWORD 相同值并二次广播（等价"重新应用主题"）。全程同步完成，保证 CLI 进程退出前通知全部发出；延迟可注入（单测传 0 跳过）；延迟窗口内外部（设置页/其他实例）已写入新值时跳过重写，让位新切换。
+
 ### 6.2 其他机制
 
 - **单实例**：命名 `Mutex`（`Local\` 前缀，按用户会话隔离）
 - **开机自启**：`HKCU\...\Run` 写入 `"ThemeSwitcher" = "<exe路径>" --minimized`
 - **暗色标题栏**：`DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE=20, ...)`，随 FR-1/FR-2 切换同步刷新
 - **托盘图标**：`NotifyIcon` + GDI+ 运行时绘制（半明半暗圆点，明暗随主题反转），避免在 repo 维护二进制图标资源
+- **贴靠托盘**：`FindWindow("Shell_TrayWnd")` 定位任务栏所在屏幕，窗口对齐该屏工作区靠任务栏一侧的角（`TrayDocking` 纯函数计算，可单测）；`StartPosition = Manual`，每次显示重新定位
 
 ## 7. 验收标准
 
@@ -103,8 +107,11 @@ SendMessageTimeout(
 6. `--minimized` 启动无窗口，仅托盘
 7. `dotnet build` / `dotnet test` / `dotnet format --verify-no-changes` 全部零错误零警告
 8. 全部源码通过 code-reviewer 子代理独立审查（证伪导向）无 P0/P1 问题
+9. 多屏（双显示器）下，主窗口全切 / 托盘左键 / CLI `--toggle` 三条切换路径，副屏任务栏与主屏同步变色（含 ≤200ms 补发延迟；真机人工确认）
+10. 主窗口在启动、`--minimized` 后托盘"显示主窗口"、第二实例激活三种情形下均出现在任务栏托盘正上方（底部任务栏），完整可见、不出屏、不遮任务栏；150% DPI 下位置正确
 
 ## 8. 变更记录
 
+- v1.2（2026-10-06）：FR-8 增补多屏副任务栏缓解机制（延迟重写 + 二次广播 + 任务栏窗口定向补发，问题 1）；新增 FR-11 主窗口紧靠托盘显示（问题 2）；验收标准增补第 9/10 条；程序版本 1.1.0
 - v1.1（2026-10-05）：FR-1 补充混合状态按钮文案"反转全部主题"；新增 FR-10 CLI 模式（端到端验证的"命令行触发"路径落地为正式功能）；NFR-1 措辞明确 xunit 仅限测试工程
 - v1.0（2026-10-05）：需求冻结基线
