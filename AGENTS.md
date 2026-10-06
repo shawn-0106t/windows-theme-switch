@@ -47,7 +47,7 @@ PYTHONUTF8=1 python scripts/make-icon.py   # 修改图标设计后重生成 src/
 
 ## 已知坑（改动前先读）
 
-- **双屏副屏任务栏不跟随是 Windows 上游 bug**（AutoDarkMode #1172 同款，见 HANDOFF 问题 1），不是本工具的实现错误；相关 workaround 改动必须双屏真机验证
-- `HWND_BROADCAST` 会同步回到自己的 `WndProc`：每次 UI 切换 `RefreshAll` 会执行两次，无害，不要"优化"它而引入递归/重入死锁
+- **任务栏对第三方主题切换的响应是 Explorer 上游 bug**（HANDOFF 问题 1，2026-10-06 三轮诊断收尾）：影响超出副屏——GUI 常驻会话内主屏任务栏也会滞后一拍；罕见深冻态下连设置页官方路径都无效（仅重启 explorer 恢复）。应用侧已累计证伪十一种 workaround（双写/二次广播/定向补发/后台线程/BeginInvoke/子进程隔离/Shell 启动/窗口激活/启动预热/PostMessage/修复主题对 partial 态无效），**决策为接受现状等待上游修复，不要再为它追加新 workaround**；实验数据与两种坏状态形态全部在 `docs/HANDOFF.md`
+- `HWND_BROADCAST` 会同步回到自己的 `WndProc`：自刷新已 BeginInvoke 化（避免广播内嵌套 UI 工作），无害，不要"优化"它而引入递归/重入死锁
 - 托盘图标句柄来自 `GetHicon`：必须与 `DestroyIcon` 配对释放（`TrayController` 已处理，改动时保持配对）
 - 单实例 = 命名 Mutex + 激活事件：二次启动路径改动需保证 `AllowSetForegroundWindow` 在 `Set()` 之前调用、激活事件先于 `MainForm` 构造创建（两个历史 P2，勿回退）

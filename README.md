@@ -63,7 +63,13 @@ HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize
 
 ## 已知限制（Windows 上游 bug）
 
-多显示器下任务栏偶尔不跟随主题切换（Windows 11 自身问题，[AutoDarkMode #1172](https://github.com/AutoDarkMode/Windows-Auto-Night-Mode/issues/1172) 同款，重启 explorer 才彻底恢复）。本项目已内置缓解（二次广播 + 任务栏窗口定向补发 + 切换后台线程化），并在托盘菜单与 CLI 提供"修复主题"兜底；若任务栏仍偶发滞留，再切一次或执行一次"修复主题"通常可恢复。诊断细节见 `docs/HANDOFF.md`。
+多显示器下任务栏对第三方主题切换的响应由 Explorer 内部状态机决定，存在已知上游问题（[AutoDarkMode #1172](https://github.com/AutoDarkMode/Windows-Auto-Night-Mode/issues/1172) 同款）。本工具内置的缓解实测效果：
+
+- **CLI 方式切换**（`--toggle` / `--set ...`，无 GUI 实例运行时）：双屏任务栏稳定即时跟随
+- **GUI 常驻切换**（托盘左键 / 主窗口按钮）：副屏任务栏正常；主屏任务栏偶尔滞后一拍（显示上一次的颜色，再切一次即跟上）
+- 任务栏完全不动时：右键托盘试一次**"修复主题"**（或命令行 `--repair`）；罕见的深层冻结态下连系统设置页切换都唤不醒，此时重启资源管理器（任务管理器结束 `explorer.exe` 后重新运行）是最后手段——这是 Windows 自身 bug 的边界，本工具无法代劳
+
+完整诊断数据（触发规律、已证伪的 workaround、两种坏状态形态）见 `docs/HANDOFF.md`。
 
 ## CI
 
